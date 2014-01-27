@@ -98,16 +98,27 @@ colnames(a)
 AZT$RTFirstAA
 
 #we'll need to do the alignment
-x <- AZT[1,]
+
+# ACT TGC ATT TAG
+# (1) (4)  (4) -> 
+#         ATT TAG AGG GAT
+# (3) (6)
+#
+AZT[400,]$RTFirstAA
+AZT[100,]$RTFirstAA
+
+paste(AZT[100,]$RTSeq)
 
 alignRT<- function(x){
-    
-    first <- x$RTFirstAA
-    last <- x$RTLastAA
-    aligned <- x$RTSeq
 
-    longest <- max(a$RTLastAA)
-    
+    first <- (x$RTFirstAA - 1) *3 + 1
+    last <- (x$RTLastAA) * 3 
+
+    aligned <- paste(x$RTSeq)
+
+    longest <- max(a$RTLastAA)*3
+
+
     while(first > 1){
         aligned <- paste(".", aligned, sep = "")
         first <- first - 1
@@ -121,9 +132,109 @@ alignRT<- function(x){
     return(aligned)
 }
 
+nchar(alignRT(x))
 
+#AZT alignment
 align <- c()
 for(i in 1:nrow(AZT)){
     align[i] <- alignRT(AZT[i,])
 }
+dim(AZT)
+length(align)
+AZT <- cbind(AZT, align)
 
+#DDI alignment
+align <- c()
+for(i in 1:nrow(DDI)){
+    align[i] <- alignRT(DDI[i,])
+}
+dim(DDI)
+length(align)
+DDI <- cbind(DDI, align)
+
+#AZTDDI alignment
+align <- c()
+for(i in 1:nrow(AZTDDI)){
+    align[i] <- alignRT(AZTDDI[i,])
+}
+dim(AZTDDI)
+length(align)
+AZTDDI <- cbind(AZTDDI, align)
+
+
+#Now, let's put all of this info into an array that we can query for polymorphisms
+
+
+#First, let's just check that our alignments look ok
+
+tmp <- matrix(data = NA, nrow = 2, ncol = 1680)
+for(i in 1:nrow(AZT)){
+    i <- 400
+    tmp[1,] <- c((strsplit(as.vector(AZT$align)[1], split = "")[[1]]))
+    tmp[2,] <- (strsplit(as.vector(AZT$align)[400], split = "")[[1]])
+}
+
+t(tmp[1:2, 1:100])
+
+
+#Let's make one array that has all alignments
+allaligns <- matrix(data = NA, nrow = nrow(AZT) + nrow(DDI) + nrow(AZTDDI), ncol =  max(a$RTLastAA)*3)
+dim(allaligns)
+
+idents <- c()
+
+for(i in 1:nrow(AZT)){
+    allaligns[i,] <- c((strsplit(as.vector(AZT$align)[i], split = "")[[1]]))
+    idents <- c(idents, "AZT")
+}
+
+startind <- which(is.na(allaligns[,1]))[1] -1
+for(i in 1:nrow(DDI)){
+    allaligns[startind + i,] <- c((strsplit(as.vector(DDI$align)[i], split = "")[[1]]))
+    idents <- c(idents, "DDI")
+}
+
+startind <- which(is.na(allaligns[,1]))[1] -1
+for(i in 1:nrow(AZTDDI)){
+    allaligns[startind + i,] <- c((strsplit(as.vector(AZTDDI$align)[i], split = "")[[1]]))
+    idents <- c(idents, "AZTDDI")
+}
+
+#what does the 100th position look like?
+allaligns[,100]
+
+#Ok, let's find our polymorphic reads
+#Let's make a list of all positions that have at least two reads (not .s)
+
+x <- allaligns[,100]
+polycheck <- function(x){
+
+    if(length(unique(x[x != "."]) > 1)){ return(1) };
+    return(false);
+}
+
+polypos <- apply(allaligns, 2, polycheck)
+table(polypos)                                     
+
+#EVERY position is polymorphic?
+
+#Ok, so, let's try looking at positions in the treatment divided populations
+
+AZTseq <- allaligns[idents == "AZT", ]
+DDIseq <- allaligns[idents == "DDI",]
+AZTDDIseq <- allaligns[idents == "AZTDDI",]
+#First question, more polymorphism in single drug regimes?
+
+#let's start by just counting the ambiguous reads by sequence
+x <- allaligns[100,]
+numAmbig <- function(x){
+
+    nondot <- (x[x != "."])
+#    size <- length(nondot)
+    return(length(grep('[ATCG]', nondot, perl = T, invert = T)))#/size)
+    
+}
+
+hist(apply(AZTseq, 1, numAmbig))
+hist(apply(DDIseq, 1, numAmbig))
+hist(apply(AZTDDIseq, 1, numAmbig))
